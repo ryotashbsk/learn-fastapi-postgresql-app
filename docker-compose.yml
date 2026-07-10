@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: fastapi-sample-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sample_app
+      POSTGRES_USER: sample_user
+      POSTGRES_PASSWORD: sample_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sample_user -d sample_app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

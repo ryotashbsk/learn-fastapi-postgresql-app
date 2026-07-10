@@ -1,0 +1,28 @@
+[project]
+name = "learn-fastapi-postgresql-app"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+
+[tool.ruff.lint]
+ignore = ["F541", "F401", "E722"]
+
+[tool.ruff.format]
+quote-style="single"
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["app.py", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

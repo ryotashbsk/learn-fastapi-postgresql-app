@@ -1,0 +1,39 @@
+# Python のバイトコードとキャッシュ
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 仮想環境
+.venv/
+venv/
+env/
+ENV/
+
+# 環境変数とローカルの秘密情報
+.env
+.env.*
+!.env.example
+
+# 実行時ファイル
+instance/
+*.log
+*.pid
+
+# テスト、カバレッジ、ツールのキャッシュ
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ビルド成果物
+build/
+dist/
+*.egg-info/
+
+# エディタと OS のファイル
+.idea/
+.DS_Store
+
+# Docker のローカル上書き設定
+docker-compose.override.yml
