@@ -278,7 +278,8 @@ GitHub push 時の自動再デプロイは Cloud Build trigger と `cloudbuild.y
 | `********` | 環境固有の識別子部分 |
 | `<PROJECT_ID>` | GCP project ID。例: `learn-fastapi-********` |
 
-`main` branch へ push すると、Cloud Build trigger が `cloudbuild.yaml` を実行し、Cloud Run を再デプロイする。
+`main` branch で API 実行に関係するファイルが変わると、Cloud Build trigger が `cloudbuild.yaml` を実行し、Cloud Run を再デプロイする。
+`README.md` や `docs/` だけの変更では自動デプロイしない。
 
 手動で再デプロイする場合:
 

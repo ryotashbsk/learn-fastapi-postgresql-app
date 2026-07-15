@@ -207,6 +207,18 @@ Branch pattern: ^main$
 Image tag: $COMMIT_SHA
 ```
 
+trigger は以下のファイル変更時だけ実行。
+
+```txt
+app.py
+requirements.txt
+Dockerfile
+cloudbuild.yaml
+postgres-init/**
+```
+
+`README.md`、`docs/**`、`tests/**` だけの変更では自動デプロイしない。
+
 Cloud Build trigger の実行用サービスアカウントを作成。
 
 ```bash
@@ -278,6 +290,7 @@ gcloud builds triggers create github \
   --repo-name=GITHUB_REPO \
   --branch-pattern='^main$' \
   --build-config=cloudbuild.yaml \
+  --included-files='app.py,requirements.txt,Dockerfile,cloudbuild.yaml,postgres-init/**' \
   --service-account="projects/learn-fastapi-postgresql-app/serviceAccounts/${BUILD_SERVICE_ACCOUNT}"
 ```
 
