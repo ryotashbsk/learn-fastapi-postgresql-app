@@ -47,6 +47,10 @@ learn-fastapi-postgresql-app/
 | GET | `http://localhost:8080/` | アプリのメッセージ |
 | GET | `http://localhost:8080/health` | PostgreSQL への接続状態 |
 | GET | `http://localhost:8080/items` | `items` table のデータ |
+| POST | `http://localhost:8080/items` | `items` table へデータを追加 |
+| GET | `http://localhost:8080/items/{id}` | `items` table の単体データ |
+| PUT | `http://localhost:8080/items/{id}` | `items` table のデータを更新 |
+| DELETE | `http://localhost:8080/items/{id}` | `items` table のデータを削除 |
 
 ## Python 設定
 
@@ -181,6 +185,36 @@ curl http://localhost:8080/items
     }
   ]
 }
+```
+
+### HTTP メソッド別の操作サンプル
+
+作成:
+
+```bash
+curl -X POST http://localhost:8080/items \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Cherry","description":"Created from POST"}'
+```
+
+単体取得:
+
+```bash
+curl http://localhost:8080/items/1
+```
+
+更新:
+
+```bash
+curl -X PUT http://localhost:8080/items/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Apple","description":"Updated from PUT"}'
+```
+
+削除:
+
+```bash
+curl -X DELETE http://localhost:8080/items/1
 ```
 
 ## ローカル PostgreSQL
