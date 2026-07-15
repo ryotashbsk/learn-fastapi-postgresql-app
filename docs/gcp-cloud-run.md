@@ -199,6 +199,7 @@ Authentication:
 3. Cloud Run service を新しい image で deploy
 
 自動デプロイ対象の主な設定値は `cloudbuild.yaml` の `substitutions` で管理。
+Cloud Build trigger に専用サービスアカウントを指定するため、build log は Cloud Logging のみに出力。
 
 ```txt
 Cloud Build config: cloudbuild.yaml
