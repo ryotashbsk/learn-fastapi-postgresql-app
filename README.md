@@ -279,6 +279,7 @@ GitHub push 時の自動再デプロイは Cloud Build trigger と `cloudbuild.y
 | `<PROJECT_ID>` | GCP project ID。例: `learn-fastapi-********` |
 
 `main` branch で API 実行に関係するファイルが変わると、Cloud Build trigger が `cloudbuild.yaml` を実行し、Cloud Run を再デプロイする。
+Docker build では `.dockerignore` で不要ファイルを除外し、直近の `latest` image を `--cache-from` に使う。
 `README.md` や `docs/` だけの変更では自動デプロイしない。
 
 手動で再デプロイする場合:

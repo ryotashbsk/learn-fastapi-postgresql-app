@@ -10,3 +10,9 @@ docs
 tests
 requirements-dev.txt
 README.md
+pyproject.toml
+uv.lock
+cloudbuild.yaml
+docker-compose.yml
+requirements-dev.txt
+.gitignore

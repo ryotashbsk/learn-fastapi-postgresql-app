@@ -194,9 +194,10 @@ Authentication:
 
 `cloudbuild.yaml` は GitHub push を契機に以下を実行。
 
-1. Docker image を build
-2. Artifact Registry へ `$COMMIT_SHA` tag で push
-3. Cloud Run service を新しい image で deploy
+1. Artifact Registry から `latest` image を pull
+2. `--cache-from` で Docker image を build
+3. Artifact Registry へ `$COMMIT_SHA` / `latest` tag で push
+4. Cloud Run service を新しい image で deploy
 
 自動デプロイ対象の主な設定値は `cloudbuild.yaml` の `substitutions` で管理。
 Cloud Build trigger に専用サービスアカウントを指定するため、build log は Cloud Logging のみに出力。
@@ -213,6 +214,7 @@ trigger は以下のファイル変更時だけ実行。
 app.py
 requirements.txt
 Dockerfile
+.dockerignore
 cloudbuild.yaml
 postgres-init/**
 ```
@@ -290,7 +292,7 @@ gcloud builds triggers create github \
   --repo-name=GITHUB_REPO \
   --branch-pattern='^main$' \
   --build-config=cloudbuild.yaml \
-  --included-files='app.py,requirements.txt,Dockerfile,cloudbuild.yaml,postgres-init/**' \
+  --included-files='app.py,requirements.txt,Dockerfile,.dockerignore,cloudbuild.yaml,postgres-init/**' \
   --service-account="projects/learn-fastapi-postgresql-app/serviceAccounts/${BUILD_SERVICE_ACCOUNT}"
 ```
 
