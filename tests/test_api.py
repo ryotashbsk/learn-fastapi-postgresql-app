@@ -1,44 +1,41 @@
 from datetime import UTC, datetime
-from typing import Self, Sequence
+from typing import Self
 
 import pytest
 from fastapi.testclient import TestClient
-from psycopg import Error
+from sqlalchemy.exc import SQLAlchemyError
 
 import app as api_app
 
-ItemRow = tuple[int, str, str, datetime]
-DeletedItemRow = tuple[int]
+
+class FakeResult:
+    def __init__(self, items: list[api_app.Item]) -> None:
+        self.items = items
+
+    def all(self) -> list[api_app.Item]:
+        return sorted(self.items, key=lambda item: item.name)
 
 
-class FakeCursor:
-    def __init__(self, rows: list[ItemRow] | list[DeletedItemRow]) -> None:
-        self.rows = rows
-
-    def fetchall(self) -> list[ItemRow]:
-        item_rows = [row for row in self.rows if len(row) == 4]
-        return sorted(item_rows, key=lambda item: item[1])
-
-    def fetchone(self) -> ItemRow | DeletedItemRow | None:
-        if len(self.rows) == 0:
-            return None
-
-        return self.rows[0]
-
-
-class FakeConnection:
+class FakeSession:
     should_fail = False
 
     def __init__(self) -> None:
-        self.rows: list[ItemRow] = [
-            (1, 'Banana', 'Initial banana', datetime(2026, 1, 2, tzinfo=UTC)),
-            (2, 'Apple', 'Initial apple', datetime(2026, 1, 1, tzinfo=UTC)),
+        self.items: list[api_app.Item] = [
+            api_app.Item(
+                id=1,
+                name='Banana',
+                description='Initial banana',
+                created_at=datetime(2026, 1, 2, tzinfo=UTC),
+            ),
+            api_app.Item(
+                id=2,
+                name='Apple',
+                description='Initial apple',
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            ),
         ]
 
     def __enter__(self) -> Self:
-        if self.should_fail:
-            raise Error('ping failed')
-
         return self
 
     def __exit__(
@@ -49,97 +46,51 @@ class FakeConnection:
     ) -> None:
         return None
 
-    def execute(
-        self,
-        query: str,
-        params: Sequence[object] | None = None,
-    ) -> FakeCursor:
-        normalized_query = ' '.join(query.split())
+    def connection(self) -> None:
+        if self.should_fail:
+            raise SQLAlchemyError('ping failed')
 
-        if normalized_query == 'SELECT 1':
-            return FakeCursor([])
+    def exec(self, statement: object) -> FakeResult:
+        return FakeResult(self.items)
 
-        if normalized_query.startswith(
-            'SELECT id, name, description, created_at FROM items WHERE id = %s'
-        ):
-            item_id = self.get_item_id(params)
-            return FakeCursor([row for row in self.rows if row[0] == item_id])
+    def get(self, model: type[api_app.Item], item_id: int) -> api_app.Item | None:
+        return next((item for item in self.items if item.id == item_id), None)
 
-        if normalized_query.startswith('INSERT INTO items'):
-            name, description = self.get_item_payload(params)
-            next_id = max(row[0] for row in self.rows) + 1
-            row = (next_id, name, description, datetime(2026, 1, 3, tzinfo=UTC))
-            self.rows.append(row)
-            return FakeCursor([row])
+    def add(self, item: api_app.Item) -> None:
+        if item.id is not None:
+            return
 
-        if normalized_query.startswith('UPDATE items'):
-            name, description, item_id = self.get_update_payload(params)
-            for index, row in enumerate(self.rows):
-                if row[0] == item_id:
-                    updated_row = (item_id, name, description, row[3])
-                    self.rows[index] = updated_row
-                    return FakeCursor([updated_row])
+        next_id = max(existing_item.id or 0 for existing_item in self.items) + 1
+        item.id = next_id
+        item.created_at = datetime(2026, 1, 3, tzinfo=UTC)
+        self.items.append(item)
 
-            return FakeCursor([])
+    def commit(self) -> None:
+        return None
 
-        if normalized_query.startswith('DELETE FROM items'):
-            item_id = self.get_item_id(params)
-            for index, row in enumerate(self.rows):
-                if row[0] == item_id:
-                    del self.rows[index]
-                    return FakeCursor([(item_id,)])
+    def refresh(self, item: api_app.Item) -> None:
+        return None
 
-            return FakeCursor([])
-
-        return FakeCursor(self.rows)
-
-    def get_item_id(self, params: Sequence[object] | None) -> int:
-        if params is None or not isinstance(params[0], int):
-            raise ValueError('item id is required')
-
-        return params[0]
-
-    def get_item_payload(self, params: Sequence[object] | None) -> tuple[str, str]:
-        if (
-            params is None
-            or len(params) != 2
-            or not isinstance(params[0], str)
-            or not isinstance(params[1], str)
-        ):
-            raise ValueError('item payload is required')
-
-        return params[0], params[1]
-
-    def get_update_payload(
-        self,
-        params: Sequence[object] | None,
-    ) -> tuple[str, str, int]:
-        if (
-            params is None
-            or len(params) != 3
-            or not isinstance(params[0], str)
-            or not isinstance(params[1], str)
-            or not isinstance(params[2], int)
-        ):
-            raise ValueError('item update payload is required')
-
-        return params[0], params[1], params[2]
+    def delete(self, item: api_app.Item) -> None:
+        self.items = [
+            existing_item for existing_item in self.items if existing_item.id != item.id
+        ]
 
 
 @pytest.fixture
-def fake_connection() -> FakeConnection:
-    return FakeConnection()
+def fake_session() -> FakeSession:
+    return FakeSession()
 
 
 @pytest.fixture
 def client(
     monkeypatch: pytest.MonkeyPatch,
-    fake_connection: FakeConnection,
+    fake_session: FakeSession,
 ) -> TestClient:
-    def get_fake_connection() -> FakeConnection:
-        return fake_connection
+    def get_fake_session() -> FakeSession:
+        return fake_session
 
-    monkeypatch.setattr(api_app, 'get_connection', get_fake_connection)
+    monkeypatch.setattr(api_app, 'get_session', get_fake_session)
 
     return TestClient(api_app.app)
 
@@ -160,9 +111,9 @@ def test_health(client: TestClient) -> None:
 
 def test_health_error(
     client: TestClient,
-    fake_connection: FakeConnection,
+    fake_session: FakeSession,
 ) -> None:
-    fake_connection.should_fail = True
+    fake_session.should_fail = True
 
     response = client.get('/health')
 

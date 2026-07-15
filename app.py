@@ -1,13 +1,13 @@
 import os
 from datetime import datetime
-from typing import Sequence
+from typing import ClassVar
 
-import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
-from psycopg.rows import TupleRow
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 load_dotenv()
 
@@ -15,6 +15,8 @@ DATABASE_URL = os.getenv(
     'DATABASE_URL',
     'postgresql://sample_user:sample_password@localhost:5432/sample_app',
 )
+ENGINE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+engine = create_engine(ENGINE_URL)
 
 app = FastAPI(title='FastAPI + PostgreSQL')
 
@@ -26,6 +28,15 @@ class MessageResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     database: str
+
+
+class Item(SQLModel, table=True):
+    __tablename__: ClassVar[str] = 'items'
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    description: str = ''
+    created_at: datetime | None = None
 
 
 class ItemResponse(BaseModel):
@@ -53,37 +64,27 @@ class DeleteResponse(BaseModel):
     message: str
 
 
-def get_connection() -> psycopg.Connection[TupleRow]:
-    return psycopg.connect(DATABASE_URL)
+def get_session() -> Session:
+    return Session(engine)
 
 
-def serialize_item(item: Sequence[object]) -> ItemResponse:
-    created_at = item[3]
-
+def serialize_item(item: Item) -> ItemResponse:
     return ItemResponse(
-        id=str(item[0]),
-        name=str(item[1]),
-        description=str(item[2]),
-        created_at=created_at.isoformat() if isinstance(created_at, datetime) else None,
+        id=str(item.id),
+        name=item.name,
+        description=item.description,
+        created_at=item.created_at.isoformat()
+        if isinstance(item.created_at, datetime)
+        else None,
     )
 
 
-def fetch_item_or_404(
-    connection: psycopg.Connection[TupleRow], item_id: int
-) -> ItemResponse:
-    row = connection.execute(
-        """
-        SELECT id, name, description, created_at
-        FROM items
-        WHERE id = %s
-        """,
-        (item_id,),
-    ).fetchone()
-
-    if row is None:
+def fetch_item_or_404(session: Session, item_id: int) -> Item:
+    item = session.get(Item, item_id)
+    if item is None:
         raise HTTPException(status_code=404, detail='Item not found')
 
-    return serialize_item(row)
+    return item
 
 
 @app.get('/', response_model=MessageResponse)
@@ -94,11 +95,11 @@ def index() -> MessageResponse:
 @app.get('/health', response_model=HealthResponse)
 def health() -> HealthResponse | JSONResponse:
     try:
-        with get_connection() as connection:
-            connection.execute('SELECT 1')
+        with get_session() as session:
+            session.connection()
 
         return HealthResponse(status='ok', database='connected')
-    except psycopg.Error as exc:
+    except SQLAlchemyError as exc:
         return JSONResponse(
             status_code=500,
             content={'status': 'error', 'detail': str(exc)},
@@ -107,75 +108,48 @@ def health() -> HealthResponse | JSONResponse:
 
 @app.get('/items', response_model=ItemsResponse)
 def get_items() -> ItemsResponse:
-    with get_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, name, description, created_at
-            FROM items
-            ORDER BY name ASC
-            """
-        ).fetchall()
+    with get_session() as session:
+        items = session.exec(select(Item).order_by(Item.name)).all()
 
-    return ItemsResponse(items=[serialize_item(row) for row in rows])
+    return ItemsResponse(items=[serialize_item(item) for item in items])
 
 
 @app.post('/items', response_model=ItemResponse, status_code=status.HTTP_201_CREATED)
 def create_item(payload: ItemCreateRequest) -> ItemResponse:
-    with get_connection() as connection:
-        row = connection.execute(
-            """
-            INSERT INTO items (name, description)
-            VALUES (%s, %s)
-            RETURNING id, name, description, created_at
-            """,
-            (payload.name, payload.description),
-        ).fetchone()
+    item = Item(name=payload.name, description=payload.description)
 
-    if row is None:
-        raise HTTPException(status_code=500, detail='Item creation failed')
+    with get_session() as session:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
 
-    return serialize_item(row)
+    return serialize_item(item)
 
 
 @app.get('/items/{item_id}', response_model=ItemResponse)
 def get_item(item_id: int) -> ItemResponse:
-    with get_connection() as connection:
-        return fetch_item_or_404(connection, item_id)
+    with get_session() as session:
+        return serialize_item(fetch_item_or_404(session, item_id))
 
 
 @app.put('/items/{item_id}', response_model=ItemResponse)
 def update_item(item_id: int, payload: ItemUpdateRequest) -> ItemResponse:
-    with get_connection() as connection:
-        row = connection.execute(
-            """
-            UPDATE items
-            SET name = %s,
-                description = %s
-            WHERE id = %s
-            RETURNING id, name, description, created_at
-            """,
-            (payload.name, payload.description, item_id),
-        ).fetchone()
+    with get_session() as session:
+        item = fetch_item_or_404(session, item_id)
+        item.name = payload.name
+        item.description = payload.description
+        session.add(item)
+        session.commit()
+        session.refresh(item)
 
-    if row is None:
-        raise HTTPException(status_code=404, detail='Item not found')
-
-    return serialize_item(row)
+    return serialize_item(item)
 
 
 @app.delete('/items/{item_id}', response_model=DeleteResponse)
 def delete_item(item_id: int) -> DeleteResponse:
-    with get_connection() as connection:
-        row = connection.execute(
-            """
-            DELETE FROM items
-            WHERE id = %s
-            RETURNING id
-            """,
-            (item_id,),
-        ).fetchone()
-
-    if row is None:
-        raise HTTPException(status_code=404, detail='Item not found')
+    with get_session() as session:
+        item = fetch_item_or_404(session, item_id)
+        session.delete(item)
+        session.commit()
 
     return DeleteResponse(message='Item deleted')

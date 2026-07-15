@@ -3,7 +3,8 @@
 FastAPI から PostgreSQL の `items` table を読み取る JSON API サンプル。
 
 - フレームワーク: FastAPI
-- DB クライアント: psycopg
+- ORM: SQLModel
+- DB driver: psycopg
 - ASGI サーバー: uvicorn
 - Python 管理: uv
 - ローカル DB: Docker Compose PostgreSQL
