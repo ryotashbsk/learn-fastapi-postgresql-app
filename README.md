@@ -25,6 +25,7 @@ learn-fastapi-postgresql-app/
 ├── requirements-dev.txt
 ├── pyproject.toml
 ├── docker-compose.yml
+├── cloudbuild.yaml
 ├── postgres-init/
 │   └── 001-items.sql
 ├── docs/
@@ -249,6 +250,7 @@ docker compose up -d postgres
 ## GCP デプロイ設定
 
 Cloud Run、Cloud SQL for PostgreSQL、Artifact Registry、Secret Manager を使った構成。
+GitHub push 時の自動再デプロイは Cloud Build trigger と `cloudbuild.yaml` を使う。
 
 詳細な設定値、build / deploy、Cloud SQL 初期データ投入、トラブルシュートは [docs/gcp-cloud-run.md](docs/gcp-cloud-run.md) を参照。
 
@@ -256,25 +258,44 @@ Cloud Run、Cloud SQL for PostgreSQL、Artifact Registry、Secret Manager を使
 
 | 種別 | 値 |
 | --- | --- |
-| Project ID | `learn-fastapi-postgresql-app` |
+| Project ID | `learn-fastapi-********` |
 | Region | `asia-northeast1` |
 | Artifact Registry repository | `learn-fastapi` |
-| Cloud Run service | `learn-fastapi-postgresql-app-git` |
+| Cloud Run service | `learn-fastapi-********-git` |
+| Container image name | `learn-fastapi-********` |
 | Cloud SQL instance | `learn-fastapi-postgres` |
 | Secret Manager secret | `database-url` |
-| Cloud Run service account | `cloud-run-fastapi@learn-fastapi-postgresql-app.iam.gserviceaccount.com` |
+| Cloud Run service account | `cloud-run-fastapi@<PROJECT_ID>.iam.gserviceaccount.com` |
+| Cloud Build trigger | `deploy-cloud-run-main` |
+| Cloud Build trigger region | `asia-northeast1` |
+| Cloud Build service account | `cloud-build-deploy@<PROJECT_ID>.iam.gserviceaccount.com` |
 
-最小の再デプロイ手順:
+プレースホルダー:
+
+| 値 | 内容 |
+| --- | --- |
+| `********` | 環境固有の識別子部分 |
+| `<PROJECT_ID>` | GCP project ID。例: `learn-fastapi-********` |
+
+`main` branch へ push すると、Cloud Build trigger が `cloudbuild.yaml` を実行し、Cloud Run を再デプロイする。
+
+手動で再デプロイする場合:
 
 ```bash
+PROJECT_ID="learn-fastapi-********"
+CLOUD_RUN_SERVICE="learn-fastapi-********-git"
+RUNTIME_SERVICE_ACCOUNT="cloud-run-fastapi@${PROJECT_ID}.iam.gserviceaccount.com"
+IMAGE_NAME="learn-fastapi-********"
+IMAGE="asia-northeast1-docker.pkg.dev/${PROJECT_ID}/learn-fastapi/${IMAGE_NAME}:latest"
+
 gcloud builds submit \
-  --project=learn-fastapi-postgresql-app \
-  --tag asia-northeast1-docker.pkg.dev/learn-fastapi-postgresql-app/learn-fastapi/learn-fastapi-postgresql-app:latest \
+  --project="${PROJECT_ID}" \
+  --tag "${IMAGE}" \
   .
 
-gcloud run services update learn-fastapi-postgresql-app-git \
-  --project=learn-fastapi-postgresql-app \
+gcloud run services update "${CLOUD_RUN_SERVICE}" \
+  --project="${PROJECT_ID}" \
   --region=asia-northeast1 \
-  --image=asia-northeast1-docker.pkg.dev/learn-fastapi-postgresql-app/learn-fastapi/learn-fastapi-postgresql-app:latest \
-  --service-account=cloud-run-fastapi@learn-fastapi-postgresql-app.iam.gserviceaccount.com
+  --image="${IMAGE}" \
+  --service-account="${RUNTIME_SERVICE_ACCOUNT}"
 ```
